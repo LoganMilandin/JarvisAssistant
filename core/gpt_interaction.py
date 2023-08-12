@@ -8,15 +8,18 @@ with open('openai_API_key.txt', 'r') as file:
 
 
 def append_to_interaction_history(user_text, interaction_history):
+    model = "gpt-4"
     interaction_history.append({"role": "user", "content": user_text})
+
     response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo-0613",
+        model=model,
         messages=interaction_history,
         functions=plugin_registry.plugin_function_docs,
         function_call="auto",
+        temperature=0
     )
 
-    if response["choices"][0]["message"].get("function_call"):
+    while response["choices"][0]["message"].get("function_call"):
 
         function_name = response["choices"][0]["message"]["function_call"]["name"]
         function_to_call = plugin_registry.plugin_function_registry[function_name]
@@ -29,11 +32,17 @@ def append_to_interaction_history(user_text, interaction_history):
             "name": function_name,
             "content": function_response,
         })
-        second_response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo-0613",
+        response = openai.ChatCompletion.create(
+            model=model,
             messages=interaction_history,
+            functions=plugin_registry.plugin_function_docs,
+            function_call="auto",
+            temperature=0
         )
-        return second_response["choices"][0]["message"]["content"]
+        # print("MESSAGE:")
+        # print(second_response["choices"][0]["message"])
+        # interaction_history.append(second_response["choices"][0]["message"])
+        # return second_response["choices"][0]["message"]["content"]
 
     interaction_history.append(response["choices"][0]["message"])
     return response["choices"][0]["message"]["content"]

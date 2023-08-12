@@ -22,7 +22,7 @@ def get_user_speech():
 
         nonlocal speech
         speech += f" {evt.result.text}"
-        if "long input" not in speech or "thank you" in evt.result.text.lower():
+        if "long input" not in speech.lower() or "thank you" in evt.result.text.lower():
             nonlocal got_whole_speech
             got_whole_speech = True
 
