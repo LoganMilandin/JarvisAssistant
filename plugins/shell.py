@@ -46,7 +46,11 @@ class ShellExecutor:
             if self.delimiter in line:
                 continue  # Exclude the delimiter from the returned output
             lines.append(line)
-        return ''.join(lines)
+
+        if len(lines) > 50:
+            return ''.join(["FIRST 50 LINES OF OUTPUT ONLY"] + lines[0:50])
+        else:
+            return ''.join(lines)
 
     def close(self):
         self.process.terminate()
@@ -58,7 +62,9 @@ shell = ShellExecutor()
 def execute_command_and_get_output(command):
     print("executing command:", command)
     shell.execute(command)
-    return shell.get_output()
+    out = shell.get_output()
+    print("output:", out)
+    return out
 
 # Example Usage:
 if __name__ == '__main__':

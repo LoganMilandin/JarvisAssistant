@@ -5,16 +5,28 @@ from plugins import shell
 plugin_function_docs = [
     {
         "name": "send_email",
-        "description": "Send an email to given email address",
+        "description": "Send an email to given email address. You should only use this if the user specifically asks you to send an email. The email will be encoded as HTML, not plaintext, so you should include appropriate tags for newlines and other formatting.",
         "parameters": {
             "type": "object",
             "properties": {
+                "subject": {
+                    "type": "string",
+                    "description": "The subject of the email",
+                },
+                "content": {
+                    "type": "string",
+                    "description": "The email address of the recipient",
+                },
                 "recipient": {
                     "type": "string",
                     "description": "The email address of the recipient",
+                },
+                "attachments": {
+                    "type": "string",
+                    "description": "A comma-separated list of paths to files to attach to the email",
                 }
             },
-            "required": ["person"],
+            "required": ["subject", "content", "recipient", "attachments"],
         },
     },
 
