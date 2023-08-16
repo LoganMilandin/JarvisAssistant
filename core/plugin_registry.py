@@ -41,7 +41,8 @@ plugin_function_docs = [
                     "description": "The shell command to execute",
                 }
             }
-        }
+        },
+        "required": ["command"]
     }
 ]
 

@@ -23,7 +23,8 @@ Logan Milandin - milandin62@gmail.com
 Avery Milandin - averymilandin@gmail.com
 Amir Mola - amirmola2@gmail.com
 Amrit Banga - amrit@banga.us
-Ari Salehpour -
+Ari Salehpour - arisalehpour@gmail.com
+Chanelle Arobelle - arobelchanelle@yahoo.com
 """}]
 
 
@@ -37,8 +38,8 @@ os.mkdir(f"logs/{current_time}_start")
 
 while True:
     # if the keyword is required, listen for it
-    if keyword_required:
-        speech_utils.wait_for_keyphrase()
+    # if keyword_required:
+    #     speech_utils.wait_for_keyphrase()
     keyword_required = False
     speech = speech_utils.get_user_speech()
     if speech.strip() == "":
