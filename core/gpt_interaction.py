@@ -9,13 +9,29 @@ from core import speech_utils
 with open('openai_API_key.txt', 'r') as file:
     openai.api_key = file.readline().strip()
 
+# hack to remove the JSON mess that comes before the first sentence
+def remove_json_start(sentence):
+    json_start = "\"message\": \""
+    if json_start in sentence:
+        return sentence[sentence.index(json_start)+len(json_start):]
+    return sentence
+
+def remove_json_end(sentence):
+    # more hacks to remove JSON at the end. This is a little tricker than above because
+    # the formatting is inconsistent and we need to match the whole terminating string, not just the "message" part
+    json_end = r'["\']\s*\}'
+    match = re.search(json_end, sentence)
+    if match:
+        return sentence[:match.start()]
+    return sentence
+
 def sentence_stream_from_token_stream(response_stream):
     def find_sentence_end(buffer):
         # Identify potential sentence-ending positions
         positions = [buffer.find(p) for p in ['. ', '! ', '? ']]
         
-        # Filter out positions that are either -1 or have a space right before them
-        valid_positions = [pos for pos in positions if pos > 0 and buffer[pos-1] != ' ']
+        # Filter out positions that are either -1 or have a space right before them, plus those with "Mr" or "Ms" right before them
+        valid_positions = [pos for pos in positions if pos > 0 and buffer[pos-1] != ' ' and buffer[pos-2:pos] != "Mr" and buffer[pos-2:pos] != "Ms"]
         
         return min(valid_positions) if valid_positions else -1
 
@@ -26,34 +42,29 @@ def sentence_stream_from_token_stream(response_stream):
         first_end = find_sentence_end(buffer)
 
         while first_end != -1:
-            sentence = buffer[:first_end+1].strip()  # +1 to include the punctuation
-            # hack to remove the JSON mess that comes before the actual sentence
-            json_start = "\"message\": \""
-            if json_start in sentence:
-                sentence = sentence[sentence.index(json_start)+len(json_start):]
+            sentence = remove_json_start(buffer[:first_end+1].strip())  # +1 to include the punctuation
             yield sentence
 
             # Remove the processed part from the buffer
             buffer = buffer[first_end+2:].strip()  # +2 to move past the punctuation and space
-
             # Find the next valid pattern match in the remaining buffer
             first_end = find_sentence_end(buffer)
         chunk = next(response_stream)
 
+
     # If there's anything left in the buffer after all tokens are processed, yield it too
     if buffer:
-        # more hacky mess to remove JSON at the end. This is a little tricker than above because
-        # the formatting is inconsistent and we need to match the whole terminating string, not just the "message" part
-        json_end = r'["\']\s*\}'
-        match = re.search(json_end, buffer)
-        if match:
-            buffer = buffer[:match.start()]
+        buffer = remove_json_end(buffer)
+        # if the response is only one sentence, also need to remove the messy start
+        buffer = remove_json_start(buffer)
         yield buffer
 
 def speak_streamed_response(response_stream):
     sentence_stream = sentence_stream_from_token_stream(response_stream)
     sentences = []
     for sentence in sentence_stream:
+        if not sentence:
+            input()
         speech_utils.speak_response(sentence)
         sentences.append(sentence)
     return " ".join(sentences)
