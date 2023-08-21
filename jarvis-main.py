@@ -18,8 +18,6 @@ When asked to edit source files, always examine their current contents before at
 If you can’t find a file the user refers to when using the shell, ls the current directory to look for something similar (recall their speech may have been mistranscribed)
 Remember to call functions with <function name>, not functions.<function name>
 
-Test paragraph: The quick brown fox jumped over the lazy dog. Here is another sentence designed to test the new streaming capabilities. This is now becoming a reasonably long response. In fact, it's now four sentences. This means the latency for the streaming response should be much less than the non-streaming version.
-                     
 gmail lookup table:
 Logan Milandin - milandin62@gmail.com
 Avery Milandin - averymilandin@gmail.com

@@ -9,23 +9,23 @@ from core import speech_utils
 with open('openai_API_key.txt', 'r') as file:
     openai.api_key = file.readline().strip()
 
-# hack to remove the JSON mess that comes before the first sentence
-def remove_json_start(sentence):
-    json_start = "\"message\": \""
-    if json_start in sentence:
-        return sentence[sentence.index(json_start)+len(json_start):]
-    return sentence
+def sentence_stream_from_token_stream(token_stream):
+    # hack to remove the JSON mess that comes before the first sentence
+    def remove_json_start(sentence):
+        json_start = "\"message\": \""
+        if json_start in sentence:
+            return sentence[sentence.index(json_start)+len(json_start):]
+        return sentence
 
-def remove_json_end(sentence):
-    # more hacks to remove JSON at the end. This is a little tricker than above because
-    # the formatting is inconsistent and we need to match the whole terminating string, not just the "message" part
-    json_end = r'["\']\s*\}'
-    match = re.search(json_end, sentence)
-    if match:
-        return sentence[:match.start()]
-    return sentence
-
-def sentence_stream_from_token_stream(response_stream):
+    def remove_json_end(sentence):
+        # more hacks to remove JSON at the end. This is a little tricker than above because
+        # the formatting is inconsistent and we need to match the whole terminating string, not just the "message" part
+        json_end = r'["\']\s*\}'
+        match = re.search(json_end, sentence)
+        if match:
+            return sentence[:match.start()]
+        return sentence
+    
     def find_sentence_end(buffer):
         # Identify potential sentence-ending positions
         positions = [buffer.find(p) for p in ['. ', '! ', '? ']]
@@ -36,21 +36,19 @@ def sentence_stream_from_token_stream(response_stream):
         return min(valid_positions) if valid_positions else -1
 
     buffer = ''
-    chunk = next(response_stream)
+    chunk = next(token_stream)
     while chunk["choices"][0]["delta"].get("function_call") is not None:
         buffer += chunk["choices"][0]["delta"]["function_call"]["arguments"]
         first_end = find_sentence_end(buffer)
-
         while first_end != -1:
             sentence = remove_json_start(buffer[:first_end+1].strip())  # +1 to include the punctuation
             yield sentence
-
             # Remove the processed part from the buffer
             buffer = buffer[first_end+2:].strip()  # +2 to move past the punctuation and space
             # Find the next valid pattern match in the remaining buffer
             first_end = find_sentence_end(buffer)
-        chunk = next(response_stream)
 
+        chunk = next(token_stream)
 
     # If there's anything left in the buffer after all tokens are processed, yield it too
     if buffer:
@@ -59,20 +57,39 @@ def sentence_stream_from_token_stream(response_stream):
         buffer = remove_json_start(buffer)
         yield buffer
 
-def speak_streamed_response(response_stream):
-    sentence_stream = sentence_stream_from_token_stream(response_stream)
+
+def speak_streamed_response(interaction_history, token_stream):
+    sentence_stream = sentence_stream_from_token_stream(token_stream)
     sentences = []
     for sentence in sentence_stream:
         if not sentence:
             input()
         speech_utils.speak_response(sentence)
         sentences.append(sentence)
-    return " ".join(sentences)
 
-def send_message_and_handle_response(user_text, interaction_history):
+    interaction_history[-1]["function_call"]["arguments"] = json.dumps({"message": " ".join(sentences)})
+
+
+def handle_normal_function_call(interaction_history, token_stream):
+    #handle regular function call
+    chunk = next(token_stream)
+    while chunk["choices"][0]["delta"].get("function_call") is not None:
+        interaction_history[-1]["function_call"]["arguments"] += chunk["choices"][0]["delta"]["function_call"]["arguments"]
+        chunk = next(token_stream)
+        print(interaction_history[-1]["function_call"]["arguments"])
+        input()
+
+    function_to_call = plugin_registry.plugin_function_registry[interaction_history[-1]["function_call"]["name"]]
+    function_output = function_to_call(**json.loads(interaction_history[-1]["function_call"]["arguments"]))
+    interaction_history.append({
+        "role": "function",
+        "name": interaction_history[-1]["function_call"]["name"],
+        "content": function_output,
+    })
+
+
+def handle_single_interaction(interaction_history):
     model = "gpt-4"
-    interaction_history.append({"role": "user", "content": user_text})
-
     token_stream = openai.ChatCompletion.create(
         model=model,
         messages=interaction_history,
@@ -81,7 +98,6 @@ def send_message_and_handle_response(user_text, interaction_history):
         temperature=0,
         stream=True
     )
-
     message = ""
     chunk = next(token_stream)
     # sometimes non-null responses contain empty content. So explicitly check for None
@@ -97,29 +113,29 @@ def send_message_and_handle_response(user_text, interaction_history):
     # at this point we should be looking at the first chunk of the function call,
     # which always contains the full name of the function being called
     function_name = chunk["choices"][0]["delta"]["function_call"]["name"]
-
-    interaction = {
+    interaction_history.append({
         "role": "assistant",
         "content": message if message else None,
         "function_call": {
             "name": function_name,
+            "arguments": ""
         }
-    }
+    })
     if function_name == "respond":
-        full_response = speak_streamed_response(token_stream)
-        interaction["function_call"]["arguments"] = json.dumps({"message": full_response})
+        speak_streamed_response(interaction_history, token_stream)
+    elif function_name in plugin_registry.plugin_function_registry:
+        handle_normal_function_call(interaction_history, token_stream)
     else:
-        pass
-        #handle regular function call
+        #TODO: handle this better
+        print("ERROR: invalid function call")
 
-
-    interaction_history.append(interaction)
     return function_name == "respond"
 
 def work_autonomously_until_done(user_text, interaction_history):
+    interaction_history.append({"role": "user", "content": user_text})
     responded_to_user = False
     while not responded_to_user:
-        responded_to_user = send_message_and_handle_response(user_text, interaction_history)
+        responded_to_user = handle_single_interaction(interaction_history)
 
 
 
