@@ -43,7 +43,21 @@ plugin_function_docs = [
             }
         },
         "required": ["command"]
-    }
+    },
+    {
+        "name": "respond",
+        "description": "Speak a given string of text out loud to the user. You should use this function when communicating ordinary responses, rather than sending a regular message.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "description": "The message to be spoken aloud",
+                }
+            }
+        },
+        "required": ["message"]
+    },
 ]
 
 # GPT will respond with a string, this registry maps it to a function to call
