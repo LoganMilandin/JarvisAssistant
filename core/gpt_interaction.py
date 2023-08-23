@@ -76,8 +76,6 @@ def handle_normal_function_call(interaction_history, token_stream):
     while chunk["choices"][0]["delta"].get("function_call") is not None:
         interaction_history[-1]["function_call"]["arguments"] += chunk["choices"][0]["delta"]["function_call"]["arguments"]
         chunk = next(token_stream)
-        print(interaction_history[-1]["function_call"]["arguments"])
-        input()
 
     function_to_call = plugin_registry.plugin_function_registry[interaction_history[-1]["function_call"]["name"]]
     function_output = function_to_call(**json.loads(interaction_history[-1]["function_call"]["arguments"]))
@@ -87,29 +85,44 @@ def handle_normal_function_call(interaction_history, token_stream):
         "content": function_output,
     })
 
+def get_function_call(interaction_history):
+    model = "gpt-4"
+    got_fn_call = False
+    while not got_fn_call:
+        token_stream = openai.ChatCompletion.create(
+            model=model,
+            messages=interaction_history,
+            functions=plugin_registry.plugin_function_docs,
+            function_call="auto",
+            temperature=0,
+            stream=True
+        )
+        message = ""
+        chunk = next(token_stream)
+        # sometimes non-null responses contain empty content. So explicitly check for None
+        while chunk["choices"][0]["delta"].get("content") is not None:
+            message += chunk["choices"][0]["delta"]["content"] 
+            print(chunk["choices"][0]["delta"]["content"] , end="", flush=True)
+            chunk = next(token_stream)
+
+        # TODO: handle this more elegantly
+        if chunk["choices"][0].get("finish_reason"):
+            print("ERROR: DID NOT CALL A FUNCTION")
+            interaction_history.append({
+                "role": "assistant",
+                "content": message if message else None
+            })
+            interaction_history.append({
+                "role": "user",
+                "content": "You did not call a function. Please try again."
+            })
+        else:
+            got_fn_call = True
+    return message, chunk, token_stream
+
 
 def handle_single_interaction(interaction_history):
-    model = "gpt-4"
-    token_stream = openai.ChatCompletion.create(
-        model=model,
-        messages=interaction_history,
-        functions=plugin_registry.plugin_function_docs,
-        function_call="auto",
-        temperature=0,
-        stream=True
-    )
-    message = ""
-    chunk = next(token_stream)
-    # sometimes non-null responses contain empty content. So explicitly check for None
-    while chunk["choices"][0]["delta"].get("content") is not None:
-        message += chunk["choices"][0]["delta"]["content"] 
-        print(chunk["choices"][0]["delta"]["content"] , end="", flush=True)
-        chunk = next(token_stream)
-
-    # TODO: handle this more elegantly
-    if chunk["choices"][0].get("finish_reason"):
-        print("ERROR: DID NOT CALL A FUNCTION")
-
+    message, chunk, token_stream = get_function_call(interaction_history)
     # at this point we should be looking at the first chunk of the function call,
     # which always contains the full name of the function being called
     function_name = chunk["choices"][0]["delta"]["function_call"]["name"]
